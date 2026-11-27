@@ -33,13 +33,12 @@ const MANIFEST_JSON: &str = r#"{
     {
       "id": "gain",
       "name": "Linear Gain",
-      "type": {
-        "float": {
-          "min": 0.0,
-          "max": 4.0,
-          "decimals": 2,
-          "unit": "x"
-        }
+      "kind": {
+        "type": "float",
+        "min": 0.0,
+        "max": 4.0,
+        "decimals": 2,
+        "unit": "x"
       },
       "default": 1.0,
       "animatable": true,
