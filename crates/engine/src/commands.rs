@@ -3376,8 +3376,12 @@ fn list_effects(p: &Value) -> Value {
     let kind = str_p(p, "kind");
     let folder = str_p(p, "folder");
     let detail = p.get("detail").and_then(Value::as_bool).unwrap_or(false);
+    // Plugin-provided effects are registered at runtime: they belong to this
+    // list too, the same way the Effects panel of the UI shows them.
+    let dynamiques = filmcraft_project::dynamic_effect_defs();
     let out = filmcraft_project::effect_defs()
         .iter()
+        .chain(dynamiques.iter().copied())
         .filter(|d| kind.is_none_or(|k| format!("{:?}", d.kind).eq_ignore_ascii_case(k)))
         .filter(|d| folder.is_none_or(|f| d.category.join("/").starts_with(f)))
         .map(|d| {
