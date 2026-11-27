@@ -465,13 +465,24 @@ pub fn apply(img: &mut Image, e: &EffectInstance, cx: &FxCtx) {
             let px = (f(e, "size", cx) / 100.0 * img.h as f32 * 0.5).max(6.0);
             let box_alpha = if e.effect == "timecode" { (f(e, "opacity", cx) / 100.0).clamp(0.0, 1.0) * 0.8 } else { 0.8 };
             crate::graphics::burn_text(img, &text, family, pos, px, box_alpha);
+        }
         unknown_id => {
             let mut params_map = serde_json::Map::new();
+            // A plugin declares its popups by name, so it must receive the
+            // chosen option and not the menu index: its own manifest
+            // validation rejects anything that is not one of its options.
+            let definition = filmcraft_project::find_effect(unknown_id);
             for (k, v) in &e.params {
                 let val = match v.value_at(cx.t) {
                     filmcraft_project::ParamValue::Float(f) => serde_json::json!(f),
                     filmcraft_project::ParamValue::Bool(b) => serde_json::json!(b),
-                    filmcraft_project::ParamValue::Choice(c) => serde_json::json!(c),
+                    filmcraft_project::ParamValue::Choice(index) => {
+                        let options = definition.and_then(|d| d.params.iter().find(|p| p.id == k.as_str()).map(|p| &p.kind));
+                        match options {
+                            Some(filmcraft_project::ParamKind::Choice(names)) => serde_json::json!(names.get(index as usize).copied().unwrap_or_default()),
+                            _ => serde_json::json!(index),
+                        }
+                    }
                     filmcraft_project::ParamValue::Color(c) => serde_json::json!(c),
                     filmcraft_project::ParamValue::Text(s) => serde_json::json!(s),
                     filmcraft_project::ParamValue::Vec2(p) => serde_json::json!([p.x, p.y]),

@@ -98,7 +98,12 @@ pub fn try_apply_registered_effect(img: &mut Image, effect_id: &str, params_json
     if let Ok(lock) = GLOBAL_PLUGIN_REGISTRY.read() {
         if let Some(ref reg) = *lock {
             if reg.get_video_effect(effect_id).is_some() {
-                let _ = apply_plugin_effect(img, reg, effect_id, params_json);
+                // A failure used to leave the frame untouched and say nothing:
+                // it now reaches the log, otherwise a mute plugin cannot be
+                // debugged at all.
+                if let Err(error) = apply_plugin_effect(img, reg, effect_id, params_json) {
+                    log::warn!("{error}");
+                }
                 return true;
             }
         }

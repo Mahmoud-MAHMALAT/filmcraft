@@ -48,11 +48,7 @@ fn default_thread_count() -> u32 {
 
 impl Default for PluginCapabilities {
     fn default() -> Self {
-        Self {
-            memory_limit_mb: default_memory_mb(),
-            max_threads: default_thread_count(),
-            gpu_accelerated: false,
-        }
+        Self { memory_limit_mb: default_memory_mb(), max_threads: default_thread_count(), gpu_accelerated: false }
     }
 }
 
@@ -149,64 +145,51 @@ impl PluginManifest {
             if let Some(val) = values.get(&def.id) {
                 match &def.kind {
                     PluginParamKind::Float { min, max, .. } => {
-                        let num = val.as_f64().ok_or_else(|| PluginError::InvalidParameter {
-                            name: def.id.clone(),
-                            reason: "expected floating point number".into(),
-                        })?;
+                        // An integral `192` is a valid float too.
+                        let num = val
+                            .as_f64()
+                            .ok_or_else(|| PluginError::InvalidParameter { name: def.id.clone(), reason: "expected floating point number".into() })?;
                         if num < *min || num > *max {
-                            return Err(PluginError::InvalidParameter {
-                                name: def.id.clone(),
-                                reason: format!("value {num} out of bounds [{min}, {max}]"),
-                            });
+                            return Err(PluginError::InvalidParameter { name: def.id.clone(), reason: format!("value {num} out of bounds [{min}, {max}]") });
                         }
                     }
                     PluginParamKind::Int { min, max } => {
-                        let num = val.as_i64().ok_or_else(|| PluginError::InvalidParameter {
-                            name: def.id.clone(),
-                            reason: "expected integer".into(),
-                        })?;
+                        // The project model only knows floats, so an `int`
+                        // parameter reaches this point as `192.0`, never as
+                        // `192`. Requiring `as_i64` silently rejected every
+                        // effect that declared one integer parameter.
+                        let num = match val.as_i64() {
+                            Some(n) => n,
+                            None => val
+                                .as_f64()
+                                .filter(|f| f.fract() == 0.0)
+                                .map(|f| f as i64)
+                                .ok_or_else(|| PluginError::InvalidParameter { name: def.id.clone(), reason: "expected integer".into() })?,
+                        };
                         if num < *min || num > *max {
-                            return Err(PluginError::InvalidParameter {
-                                name: def.id.clone(),
-                                reason: format!("value {num} out of bounds [{min}, {max}]"),
-                            });
+                            return Err(PluginError::InvalidParameter { name: def.id.clone(), reason: format!("value {num} out of bounds [{min}, {max}]") });
                         }
                     }
                     PluginParamKind::Bool => {
                         if !val.is_boolean() {
-                            return Err(PluginError::InvalidParameter {
-                                name: def.id.clone(),
-                                reason: "expected boolean".into(),
-                            });
+                            return Err(PluginError::InvalidParameter { name: def.id.clone(), reason: "expected boolean".into() });
                         }
                     }
                     PluginParamKind::Choice { options } => {
-                        let s = val.as_str().ok_or_else(|| PluginError::InvalidParameter {
-                            name: def.id.clone(),
-                            reason: "expected string option".into(),
-                        })?;
+                        let s = val.as_str().ok_or_else(|| PluginError::InvalidParameter { name: def.id.clone(), reason: "expected string option".into() })?;
                         if !options.iter().any(|opt| opt == s) {
-                            return Err(PluginError::InvalidParameter {
-                                name: def.id.clone(),
-                                reason: format!("option '{s}' not in allowed choices"),
-                            });
+                            return Err(PluginError::InvalidParameter { name: def.id.clone(), reason: format!("option '{s}' not in allowed choices") });
                         }
                     }
                     PluginParamKind::ColorRgba => {
                         let is_array = val.as_array().map_or(false, |a| a.len() == 4);
                         if !is_array {
-                            return Err(PluginError::InvalidParameter {
-                                name: def.id.clone(),
-                                reason: "expected 4-element RGBA array [r, g, b, a]".into(),
-                            });
+                            return Err(PluginError::InvalidParameter { name: def.id.clone(), reason: "expected 4-element RGBA array [r, g, b, a]".into() });
                         }
                     }
                     PluginParamKind::Text => {
                         if !val.is_string() {
-                            return Err(PluginError::InvalidParameter {
-                                name: def.id.clone(),
-                                reason: "expected text string".into(),
-                            });
+                            return Err(PluginError::InvalidParameter { name: def.id.clone(), reason: "expected text string".into() });
                         }
                     }
                 }
@@ -248,19 +231,9 @@ impl PluginManifest {
                 };
 
                 let kind = match &p.kind {
-                    PluginParamKind::Float {
-                        min,
-                        max,
-                        decimals,
-                        ..
-                    } => filmcraft_project::ParamKind::Float {
-                        min: *min,
-                        max: *max,
-                        soft_min: *min,
-                        soft_max: *max,
-                        unit,
-                        decimals: *decimals,
-                    },
+                    PluginParamKind::Float { min, max, decimals, .. } => {
+                        filmcraft_project::ParamKind::Float { min: *min, max: *max, soft_min: *min, soft_max: *max, unit, decimals: *decimals }
+                    }
                     PluginParamKind::Int { min, max } => filmcraft_project::ParamKind::Float {
                         min: *min as f64,
                         max: *max as f64,
@@ -272,10 +245,7 @@ impl PluginManifest {
                     PluginParamKind::Bool => filmcraft_project::ParamKind::Bool,
                     PluginParamKind::ColorRgba => filmcraft_project::ParamKind::Color,
                     PluginParamKind::Choice { options } => {
-                        let opts: Vec<&'static str> = options
-                            .iter()
-                            .map(|o| -> &'static str { Box::leak(o.clone().into_boxed_str()) })
-                            .collect();
+                        let opts: Vec<&'static str> = options.iter().map(|o| -> &'static str { Box::leak(o.clone().into_boxed_str()) }).collect();
                         let opts_slice: &'static [&'static str] = Box::leak(opts.into_boxed_slice());
                         filmcraft_project::ParamKind::Choice(opts_slice)
                     }
@@ -283,15 +253,9 @@ impl PluginManifest {
                 };
 
                 let default = match &p.kind {
-                    PluginParamKind::Float { .. } => {
-                        filmcraft_project::ParamValue::Float(p.default.as_f64().unwrap_or(0.0))
-                    }
-                    PluginParamKind::Int { .. } => {
-                        filmcraft_project::ParamValue::Float(p.default.as_f64().unwrap_or(0.0))
-                    }
-                    PluginParamKind::Bool => {
-                        filmcraft_project::ParamValue::Bool(p.default.as_bool().unwrap_or(false))
-                    }
+                    PluginParamKind::Float { .. } => filmcraft_project::ParamValue::Float(p.default.as_f64().unwrap_or(0.0)),
+                    PluginParamKind::Int { .. } => filmcraft_project::ParamValue::Float(p.default.as_f64().unwrap_or(0.0)),
+                    PluginParamKind::Bool => filmcraft_project::ParamValue::Bool(p.default.as_bool().unwrap_or(false)),
                     PluginParamKind::ColorRgba => {
                         let mut rgba = [1.0, 1.0, 1.0, 1.0];
                         if let Some(arr) = p.default.as_array() {
@@ -313,19 +277,10 @@ impl PluginManifest {
                         };
                         filmcraft_project::ParamValue::Choice(idx)
                     }
-                    PluginParamKind::Text => {
-                        filmcraft_project::ParamValue::Text(p.default.as_str().unwrap_or("").to_string())
-                    }
+                    PluginParamKind::Text => filmcraft_project::ParamValue::Text(p.default.as_str().unwrap_or("").to_string()),
                 };
 
-                filmcraft_project::ParamDef {
-                    id: p_id,
-                    label: p_name,
-                    kind,
-                    default,
-                    animatable: p.animatable,
-                    group: None,
-                }
+                filmcraft_project::ParamDef { id: p_id, label: p_name, kind, default, animatable: p.animatable, group: None }
             })
             .collect();
 
